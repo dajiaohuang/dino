@@ -7,6 +7,7 @@ class CallInvitesTest : Gee.TestCase {
         add_test("invite_uses_origin_id", test_invite_uses_origin_id);
         add_test("groupchat_invite_uses_room_stanza_id", test_groupchat_invite_uses_room_stanza_id);
         add_test("invite_child_id_is_legacy_fallback", test_invite_child_id_is_legacy_fallback);
+        add_async_test("outgoing_invite_uses_call_id", test_outgoing_invite_uses_call_id);
     }
 
     private void test_invite_uses_message_id() {
@@ -23,6 +24,22 @@ class CallInvitesTest : Gee.TestCase {
 
     private void test_invite_child_id_is_legacy_fallback() {
         fail_if_not_eq_str(received_call_id(message_node("chat", null, null, null, "legacy-id")), "legacy-id");
+    }
+
+    private void test_outgoing_invite_uses_call_id(Gee.TestFinishedCallback cb) {
+        try {
+            var stream = new CallInvitesTestStream(Jid.from_string("example.test"));
+            stream.add_module(new MessageModule());
+            stream.written.connect((node) => {
+                fail_if_not_eq_str(node.get_attribute("id"), "call-id");
+                cb();
+            });
+            new Xep.CallInvites.Module().send_muji_propose(stream, "call-id",
+                    Jid.from_string("remote@example.test"),
+                    Jid.from_string("room@conference.example.test"), false, MessageStanza.TYPE_CHAT);
+        } catch (InvalidJidError e) {
+            assert_not_reached();
+        }
     }
 
     private string? received_call_id(StanzaNode node) {
@@ -52,12 +69,12 @@ class CallInvitesTest : Gee.TestCase {
                 .put_attribute("type", type);
         if (id != null) message.put_attribute("id", id);
         if (origin_id != null) {
-            message.put_node(new StanzaNode.build("origin-id", UniqueStableStanzaIDs.NS_URI)
+            message.put_node(new StanzaNode.build("origin-id", Xep.UniqueStableStanzaIDs.NS_URI)
                     .add_self_xmlns()
                     .put_attribute("id", origin_id));
         }
         if (stanza_id != null) {
-            message.put_node(new StanzaNode.build("stanza-id", UniqueStableStanzaIDs.NS_URI)
+            message.put_node(new StanzaNode.build("stanza-id", Xep.UniqueStableStanzaIDs.NS_URI)
                     .add_self_xmlns()
                     .put_attribute("by", "room@conference.example.test")
                     .put_attribute("id", stanza_id));
@@ -72,6 +89,8 @@ class CallInvitesTest : Gee.TestCase {
 }
 
 class CallInvitesTestStream : XmppStream {
+    public signal void written(StanzaNode node);
+
     public CallInvitesTestStream(Jid remote_name) {
         base(remote_name);
     }
@@ -80,7 +99,7 @@ class CallInvitesTestStream : XmppStream {
     public override async void disconnect() throws IOError {}
     public override async StanzaNode read() throws IOError { throw new IOError.CLOSED("test stream has no input"); }
     public override void write(StanzaNode node, int io_priority = Priority.DEFAULT) {}
-    public override async void write_async(StanzaNode node, int io_priority = Priority.DEFAULT, Cancellable? cancellable = null) throws IOError {}
+    public override async void write_async(StanzaNode node, int io_priority = Priority.DEFAULT, Cancellable? cancellable = null) throws IOError { written(node); }
     public override async void setup() throws IOError {}
 }
 
