@@ -25,7 +25,7 @@ namespace Xmpp.Xep.CallInvites {
         }
 
         public void send_propose(XmppStream stream, string call_id, Jid invitee, bool video, bool multi, string message_type, StanzaNode method, StanzaNode? legacy_method = null) {
-            MessageStanza invite_message = new MessageStanza() { to=invitee, type_=message_type };
+            MessageStanza invite_message = new MessageStanza(call_id) { to=invitee, type_=message_type };
             invite_message.stanza.put_node(
                     new StanzaNode.build("invite", NS_URI).add_self_xmlns()
                             .put_attribute("id", call_id)
@@ -134,10 +134,19 @@ namespace Xmpp.Xep.CallInvites {
             if (relevant_node == null) return;
 
             string? call_id = relevant_node.get_attribute("id");
-            if (call_id == null) return;
 
             if (relevant_node.name == "invite" || /* custom legacy */relevant_node.name == "propose") {
-                if (relevant_node.sub_nodes.is_empty) return;
+                string? message_id;
+                if (message.type_ == MessageStanza.TYPE_GROUPCHAT) {
+                    message_id = UniqueStableStanzaIDs.get_stanza_id(message, message.from.bare_jid);
+                } else {
+                    message_id = UniqueStableStanzaIDs.get_origin_id(message) ?? message.stanza.get_attribute("id");
+                }
+                // XEP-0482 correlates call actions with the invite message ID. Preserve the
+                // child ID emitted by older Dino versions; standard invites without it use the
+                // protocol ID from the message stanza.
+                if (call_id == null) call_id = message_id;
+                if (call_id == null || relevant_node.sub_nodes.is_empty) return;
 
                 // If there's also a JMI node, just use that one instead.
                 foreach (StanzaNode node in message.stanza.sub_nodes) {
@@ -148,6 +157,7 @@ namespace Xmpp.Xep.CallInvites {
                 call_proposed(message.from, message.to, call_id, video, relevant_node.sub_nodes, message);
                 return;
             }
+            if (call_id == null) return;
 
             switch (relevant_node.name) {
                 case "accept":

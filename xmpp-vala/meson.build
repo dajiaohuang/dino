@@ -162,6 +162,7 @@ test_sources = [
 
     'tests/jid.vala',
     'tests/stanza.vala',
+    'tests/call_invites.vala',
     'tests/color.vala',
     'tests/util.vala',
 ]
